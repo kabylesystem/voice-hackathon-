@@ -11,5 +11,7 @@ python-dotenv
 pydantic
 pytest
 pytest-asyncio
-edge-tts
 aiohttp
+gtts
+supabase
+edge-tts

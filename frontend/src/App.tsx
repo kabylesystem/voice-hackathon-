@@ -523,6 +523,7 @@ export default function App() {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ttsPlaybackSettledRef = useRef(false);
+  const ttsExpectedTurnRef = useRef(0);
   const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const cachedVoiceLangRef = useRef<string>('');
   const targetLanguageRef = useRef(targetLanguage);
@@ -582,25 +583,19 @@ export default function App() {
     } catch { /* no-op */ }
   }, []);
 
-  // ── TTS playback — restored from original working version ─────────────
-  // IMPORTANT: [] deps — uses refs for all dynamic values (no stale closure)
+  // ── TTS playback — ALWAYS plays, no "settled" gate ──────────────────────
+  // Uses only the turn counter to prevent stale TTS. No settled ref blocking.
   const playTtsPayload = useCallback((tts: any) => {
     if (!tts) return;
-    if (ttsPlaybackSettledRef.current) return;
+    const myTurn = ttsExpectedTurnRef.current;
+
+    console.log('[TTS] received payload, turn=', myTurn, 'mode=', tts?.mode, 'hasAudio=', !!tts?.audio_base64);
 
     const fallbackText = tts?.text || lastAiTextRef.current;
-    const markSpoken = () => {
-      ttsPlaybackSettledRef.current = true;
-      if (ttsFallbackTimerRef.current) {
-        clearTimeout(ttsFallbackTimerRef.current);
-        ttsFallbackTimerRef.current = null;
-      }
-    };
 
     const speakBrowser = (text: string) => {
       if (!text || !('speechSynthesis' in window)) return;
       try {
-        markSpoken();
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         const lang = targetLanguageRef.current;
@@ -625,37 +620,52 @@ export default function App() {
       }
     };
 
+    // Stop any currently playing audio first
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
     if (tts.mode === 'audio' && tts.audio_base64) {
       try {
-        if (activeAudioRef.current) {
-          activeAudioRef.current.pause();
-          activeAudioRef.current = null;
+        // Stale check: if a new turn already started, don't play old audio
+        if (ttsExpectedTurnRef.current !== myTurn) {
+          console.log('[TTS] stale turn, skipping', myTurn, 'vs', ttsExpectedTurnRef.current);
+          return;
         }
         const rawMime = (tts.content_type || 'audio/mpeg').toLowerCase();
         const mime = rawMime.includes('mp3') ? 'audio/mpeg' : rawMime;
         const audio = new Audio(`data:${mime};base64,${tts.audio_base64}`);
         audio.preload = 'auto';
         audio.volume = 1;
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-        }
-        audio.onplay = () => markSpoken();
         audio.onended = () => setAutoListenPending(true);
-        audio.onerror = () => speakBrowser(fallbackText);
+        audio.onerror = (e) => {
+          console.warn('[TTS] audio.onerror, falling back to browser', e);
+          speakBrowser(fallbackText);
+        };
         activeAudioRef.current = audio;
         const playPromise = audio.play();
         if (playPromise && typeof playPromise.then === 'function') {
-          playPromise.then(() => markSpoken()).catch(() => speakBrowser(fallbackText));
-        } else {
-          markSpoken();
+          playPromise.then(() => {
+            console.log('[TTS] audio playing successfully, turn=', myTurn);
+          }).catch((err) => {
+            console.warn('[TTS] audio.play() rejected, browser fallback', err);
+            speakBrowser(fallbackText);
+          });
         }
         return;
-      } catch {
+      } catch (err) {
+        console.warn('[TTS] audio creation failed, browser fallback', err);
         speakBrowser(fallbackText);
         return;
       }
     }
 
+    // mode === 'browser' or no audio_base64
+    console.log('[TTS] browser mode for turn=', myTurn);
     speakBrowser(fallbackText);
   }, []);
 
@@ -865,8 +875,14 @@ export default function App() {
 
     setIsLoading(true);
     setLiveTranscript('');
-    ttsPlaybackSettledRef.current = false;
+    ttsExpectedTurnRef.current += 1;
     setTtsPlaying(false);
+    // Stop any previous TTS immediately
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current = null;
+    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     triggerShootingStar();
 
     // Expose mission context for backend AI to use
