@@ -42,6 +42,16 @@ GPT-4o-mini generates adaptive i+1 responses via streaming:
 - Produces structured JSON for graph updates mid-stream
 - TTS fires on the first sentence while the rest of the response still streams — parallel pipeline for minimal latency
 
+## One conversation turn
+
+1. The React voice UI streams microphone audio over a WebSocket to FastAPI.
+2. Speechmatics transcribes speech; the transcript reaches the adaptive tutor.
+3. OpenAI streams a response. Backboard provides learner memory and receives mastery updates.
+4. Text and synthesized speech return to the browser. The Three.js/D3 graph reflects the vocabulary practiced.
+5. Supabase persists sessions and learner profiles. The interface can fall back to mock data for a local tour.
+
+The frontend uses **React, TypeScript, Vite, React Three Fiber, Three.js, D3 Force 3D, Motion and Tailwind CSS**. The backend uses **Python, FastAPI, WebSockets, Speechmatics, OpenAI, Backboard and Supabase**. Deployment targets are Vercel (frontend) and Railway (backend). Service credentials belong in local environment variables; none are required to read the code.
+
 ## Architecture
 
 ```
