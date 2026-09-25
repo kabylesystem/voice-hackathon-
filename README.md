@@ -99,7 +99,9 @@ npm run dev
 
 Requires `.env` with: `SPEECHMATICS_API_KEY`, `BACKBOARD_API_KEY`, `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`
 
-## Live Demo
+## Frontend preview
+
+The hosted frontend can be explored, but voice conversations require a running backend and service credentials.
 
 - **App**: https://frontend-puce-kappa-7o1rgv08q5.vercel.app
 - **Onboarding**: https://frontend-puce-kappa-7o1rgv08q5.vercel.app/onboarding
